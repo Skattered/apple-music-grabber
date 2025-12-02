@@ -78,12 +78,30 @@
 				console.log('[AUTH] Error code:', authError?.errorCode);
 				console.log('[AUTH] Error message:', authError?.message);
 
+				// Wait a bit and check again - token might be set after error
+				await new Promise(resolve => setTimeout(resolve, 500));
+				console.log('[AUTH] Checking instance.musicUserToken after delay...');
+				console.log('[AUTH] Token value:', instance.musicUserToken);
+				console.log('[AUTH] Instance.isAuthorized:', instance.isAuthorized);
+
 				// Check if we actually got a token despite the error
 				if (instance.musicUserToken) {
 					console.warn('[AUTH] Token exists on instance despite error!');
 					console.log('[AUTH] Retrieved token:', instance.musicUserToken);
 					musicUserToken = instance.musicUserToken;
-				} else {
+				} else if (instance.isAuthorized) {
+					console.warn('[AUTH] Instance says authorized but no token visible');
+					// Try to get it through the API
+					try {
+						const userToken = await instance.api.musicUserToken;
+						console.log('[AUTH] Got token from API:', userToken);
+						musicUserToken = userToken;
+					} catch (apiError) {
+						console.error('[AUTH] Could not get token from API:', apiError);
+					}
+				}
+
+				if (!musicUserToken) {
 					console.error('[AUTH] No token on instance, re-throwing error');
 					throw authError;
 				}

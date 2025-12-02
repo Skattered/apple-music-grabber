@@ -115,7 +115,25 @@
 				'Music-User-Token': musicUserToken
 			};
 
-			// Fetch recent tracks (limit is max 10 per request, we'll fetch 50 total)
+			// Fetch Replay/Music Summaries data
+			console.log('[DATA] Fetching music summaries (Replay data)...');
+			const replayResponse = await fetch(
+				'https://api.music.apple.com/v1/me/music-summaries?filter[year]=latest&views=top-artists,top-albums,top-songs',
+				{ headers }
+			);
+
+			console.log(`[DATA] Replay response status: ${replayResponse.status}`);
+
+			if (!replayResponse.ok) {
+				const errorText = await replayResponse.text();
+				console.error(`[DATA] Replay error response: ${errorText}`);
+				throw new Error(`Replay API failed: ${replayResponse.status} ${replayResponse.statusText}`);
+			}
+
+			replayData = await replayResponse.json();
+			console.log('[DATA] Replay data received:', replayData);
+
+			// Also fetch recent tracks
 			console.log('[DATA] Fetching recent tracks...');
 			const allTracks = [];
 
@@ -156,6 +174,34 @@
 		}
 	}
 
+	function extractTopArtists() {
+		if (!replayData?.data?.[0]?.views) return [];
+
+		const topArtistsView = replayData.data[0].views.find((v: any) => v.id === 'top-artists');
+		if (!topArtistsView?.data) return [];
+
+		return topArtistsView.data.map((item: any, index: number) => ({
+			rank: index + 1,
+			name: item.attributes?.name || 'Unknown',
+			playCount: item.attributes?.playCount || 0,
+			artworkUrl: item.attributes?.artwork?.url || ''
+		}));
+	}
+
+	function extractTopSongs() {
+		if (!replayData?.data?.[0]?.views) return [];
+
+		const topSongsView = replayData.data[0].views.find((v: any) => v.id === 'top-songs');
+		if (!topSongsView?.data) return [];
+
+		return topSongsView.data.map((item: any, index: number) => ({
+			rank: index + 1,
+			title: item.attributes?.name || 'Unknown',
+			artist: item.attributes?.artistName || 'Unknown',
+			playCount: item.attributes?.playCount || 0
+		}));
+	}
+
 	function extractRecentTracks() {
 		if (!recentTracks?.data) return [];
 
@@ -168,6 +214,9 @@
 	}
 
 	$effect(() => {
+		if (replayData) {
+			console.log('[DATA] Replay data:', replayData);
+		}
 		if (recentTracks) {
 			console.log('[DATA] Recent tracks data:', recentTracks);
 		}
@@ -200,11 +249,52 @@
 		</div>
 	{:else}
 		<div class="data-section">
-			<h2>Step 3: Get Your Listening History</h2>
+			<h2>Step 3: Get Your Replay Data</h2>
 			<button onclick={getReplayData} disabled={loading}>
-				{loading ? 'Fetching...' : 'Get Recent Tracks'}
+				{loading ? 'Fetching...' : 'Get Replay & Recent Tracks'}
 			</button>
 		</div>
+
+		{#if replayData}
+			<div class="results">
+				<h2>Your Replay {replayData.data?.[0]?.attributes?.year || ''}</h2>
+
+				{#if extractTopArtists().length > 0}
+					<h3>Top Artists</h3>
+					<div class="tracks-list">
+						{#each extractTopArtists() as artist}
+							<div class="track-item">
+								<span class="track-number">#{artist.rank}</span>
+								<div class="track-info">
+									<strong>{artist.name}</strong>
+									<span class="track-meta">{artist.playCount} plays</span>
+								</div>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				{#if extractTopSongs().length > 0}
+					<h3>Top Songs</h3>
+					<div class="tracks-list">
+						{#each extractTopSongs() as song}
+							<div class="track-item">
+								<span class="track-number">#{song.rank}</span>
+								<div class="track-info">
+									<strong>{song.title}</strong>
+									<span class="track-meta">{song.artist} • {song.playCount} plays</span>
+								</div>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<details>
+					<summary>Raw Replay Data</summary>
+					<pre>{JSON.stringify(replayData, null, 2)}</pre>
+				</details>
+			</div>
+		{/if}
 
 		{#if recentTracks}
 			<div class="results">
@@ -228,7 +318,7 @@
 				{/if}
 
 				<details>
-					<summary>Raw API Response (for debugging)</summary>
+					<summary>Raw Recent Tracks Data</summary>
 					<pre>{JSON.stringify(recentTracks, null, 2)}</pre>
 				</details>
 			</div>

@@ -61,34 +61,48 @@
 		loading = true;
 		error = '';
 
+		console.log('[AUTH] Starting authorization...');
+
 		try {
 			const instance = $musicKitStore.instance;
+			console.log('[AUTH] MusicKit instance:', instance);
 
 			// Authorize and immediately check for token, ignoring storefront errors
 			let musicUserToken;
 			try {
+				console.log('[AUTH] Calling instance.authorize()...');
 				musicUserToken = await instance.authorize();
+				console.log('[AUTH] Authorization successful, token:', musicUserToken);
 			} catch (authError: any) {
+				console.log('[AUTH] Authorization threw error:', authError);
+				console.log('[AUTH] Error code:', authError?.errorCode);
+				console.log('[AUTH] Error message:', authError?.message);
+
 				// Check if we actually got a token despite the error
 				if (instance.musicUserToken) {
-					console.warn('Authorization had errors but token was obtained:', authError);
+					console.warn('[AUTH] Token exists on instance despite error!');
+					console.log('[AUTH] Retrieved token:', instance.musicUserToken);
 					musicUserToken = instance.musicUserToken;
 				} else {
+					console.error('[AUTH] No token on instance, re-throwing error');
 					throw authError;
 				}
 			}
 
 			if (!musicUserToken) {
+				console.error('[AUTH] No music user token received');
 				throw new Error('No music user token received');
 			}
 
+			console.log('[AUTH] Updating store with authorized state');
 			musicKitStore.update(state => ({
 				...state,
 				isAuthorized: true,
 				musicUserToken: musicUserToken
 			}));
+			console.log('[AUTH] Authorization complete!');
 		} catch (e: any) {
-			console.error('Authorization error:', e);
+			console.error('[AUTH] Final error handler:', e);
 			if (e?.errorCode === 'ACCESS_DENIED') {
 				error = 'Authorization was denied or cancelled';
 			} else if (e?.errorCode === 'CONFIGURATION_ERROR') {
@@ -98,6 +112,7 @@
 			}
 		} finally {
 			loading = false;
+			console.log('[AUTH] Authorization flow ended, loading=false');
 		}
 	}
 
@@ -176,7 +191,7 @@
 </script>
 
 <div class="container">
-	<h1>Apple Music Replay Viewer</h1>
+	<h1>Apple Music Replay Grabber</h1>
 
 	{#if !$musicKitStore.isLoaded}
 		<p>Loading MusicKit...</p>

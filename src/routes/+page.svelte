@@ -61,27 +61,51 @@
 		loading = true;
 		error = '';
 
+		console.log('[AUTH] Starting authorization...');
+
 		try {
 			const instance = $musicKitStore.instance;
 
+			console.log('[AUTH] Current authorization state:', instance.isAuthorized);
+			console.log('[AUTH] Current MUT:', instance.musicUserToken);
+
+			// Check if already authorized
+			if (instance.isAuthorized && instance.musicUserToken) {
+				console.log('[AUTH] Already authorized, using existing token');
+				musicKitStore.update(state => ({
+					...state,
+					isAuthorized: true,
+					musicUserToken: instance.musicUserToken
+				}));
+				loading = false;
+				return;
+			}
+
 			// Try to authorize - this will likely fail with storefront error
+			console.log('[AUTH] Calling authorize()...');
 			let musicUserToken;
 			try {
 				musicUserToken = await instance.authorize();
+				console.log('[AUTH] Authorize succeeded, token:', musicUserToken);
 			} catch (authError: any) {
-				console.log('Auth error, checking if token was set anyway:', authError);
+				console.log('[AUTH] Authorize failed:', authError);
+				console.log('[AUTH] Checking if token was set anyway...');
+				console.log('[AUTH] instance.musicUserToken:', instance.musicUserToken);
+				console.log('[AUTH] instance.isAuthorized:', instance.isAuthorized);
 
 				// Check if token exists despite error
 				if (instance.musicUserToken) {
 					musicUserToken = instance.musicUserToken;
-					console.log('Found token on instance despite error!');
+					console.log('[AUTH] Found token on instance despite error!');
 				} else {
 					// If no token, re-throw
+					console.error('[AUTH] No token found, re-throwing error');
 					throw authError;
 				}
 			}
 
 			if (musicUserToken) {
+				console.log('[AUTH] Saving token to store');
 				musicKitStore.update(state => ({
 					...state,
 					isAuthorized: true,
@@ -91,7 +115,8 @@
 				throw new Error('No music user token obtained');
 			}
 		} catch (e: any) {
-			error = `Authorization failed: ${e?.message || e}`;
+			console.error('[AUTH] Final error:', e);
+			error = `Authorization failed: ${e?.message || e}. Try refreshing the page and authorizing again.`;
 		} finally {
 			loading = false;
 		}

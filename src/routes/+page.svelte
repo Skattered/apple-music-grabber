@@ -140,70 +140,73 @@
 		replayData = null;
 		recentTracks = null;
 
+		console.log('[DATA] Starting data fetch...');
+
 		try {
 			const { developerToken, musicUserToken } = $musicKitStore;
+			console.log('[DATA] Using dev token:', developerToken?.substring(0, 20) + '...');
+			console.log('[DATA] Using user token:', musicUserToken?.substring(0, 20) + '...');
+
 			const headers = {
 				'Authorization': `Bearer ${developerToken}`,
 				'Music-User-Token': musicUserToken
 			};
 
-			// Fetch replay data
-			const replayResponse = await fetch('https://api.music.apple.com/v1/me/replay', {
-				headers
-			});
+			// Fetch recent tracks (limit is max 10 per request, we'll fetch 50 total)
+			console.log('[DATA] Fetching recent tracks...');
+			const allTracks = [];
 
-			if (!replayResponse.ok) {
-				throw new Error(`Replay API failed: ${replayResponse.status} ${replayResponse.statusText}`);
+			for (let offset = 0; offset < 50; offset += 10) {
+				console.log(`[DATA] Fetching batch with offset ${offset}...`);
+				const recentResponse = await fetch(
+					`https://api.music.apple.com/v1/me/recent/played/tracks?limit=10&offset=${offset}`,
+					{ headers }
+				);
+
+				console.log(`[DATA] Response status: ${recentResponse.status}`);
+
+				if (!recentResponse.ok) {
+					const errorText = await recentResponse.text();
+					console.error(`[DATA] Error response: ${errorText}`);
+					throw new Error(`Recent tracks API failed: ${recentResponse.status} ${recentResponse.statusText}`);
+				}
+
+				const batch = await recentResponse.json();
+				console.log(`[DATA] Received ${batch.data?.length || 0} tracks`);
+
+				if (batch.data && batch.data.length > 0) {
+					allTracks.push(...batch.data);
+				} else {
+					console.log('[DATA] No more tracks, stopping pagination');
+					break;
+				}
 			}
 
-			replayData = await replayResponse.json();
-
-			// Fetch recent tracks
-			const recentResponse = await fetch('https://api.music.apple.com/v1/me/recent/played/tracks?limit=100', {
-				headers
-			});
-
-			if (!recentResponse.ok) {
-				throw new Error(`Recent tracks API failed: ${recentResponse.status} ${recentResponse.statusText}`);
-			}
-
-			recentTracks = await recentResponse.json();
+			recentTracks = { data: allTracks };
+			console.log(`[DATA] Total tracks fetched: ${allTracks.length}`);
 
 		} catch (e) {
+			console.error('[DATA] Fetch error:', e);
 			error = `Failed to fetch data: ${e}`;
 		} finally {
 			loading = false;
 		}
 	}
 
-	function extractTopArtists() {
-		if (!replayData?.data) return [];
+	function extractRecentTracks() {
+		if (!recentTracks?.data) return [];
 
-		const artistsMap = new Map();
-
-		for (const item of replayData.data) {
-			if (item.type === 'artists' && item.attributes) {
-				const name = item.attributes.name;
-				const playCount = item.attributes.playCount || 0;
-				const playDuration = item.attributes.playDuration || 0;
-
-				artistsMap.set(name, {
-					name,
-					playCount,
-					playDuration,
-					durationMinutes: Math.round(playDuration / 60000)
-				});
-			}
-		}
-
-		return Array.from(artistsMap.values())
-			.sort((a, b) => b.playCount - a.playCount)
-			.slice(0, 20);
+		return recentTracks.data.map((item: any) => ({
+			title: item.attributes?.name || 'Unknown',
+			artist: item.attributes?.artistName || 'Unknown',
+			album: item.attributes?.albumName || 'Unknown',
+			playedAt: item.attributes?.playParams?.playlistId || ''
+		}));
 	}
 
 	$effect(() => {
-		if (replayData) {
-			console.log('Replay data:', replayData);
+		if (recentTracks) {
+			console.log('[DATA] Recent tracks data:', recentTracks);
 		}
 	});
 </script>
@@ -234,40 +237,35 @@
 		</div>
 	{:else}
 		<div class="data-section">
-			<h2>Step 3: Get Your Replay Data</h2>
+			<h2>Step 3: Get Your Listening History</h2>
 			<button onclick={getReplayData} disabled={loading}>
-				{loading ? 'Fetching...' : 'Get Replay Data'}
+				{loading ? 'Fetching...' : 'Get Recent Tracks'}
 			</button>
 		</div>
 
-		{#if replayData || recentTracks}
+		{#if recentTracks}
 			<div class="results">
-				<h2>Top Artists</h2>
-				{#if extractTopArtists().length > 0}
-					<div class="artists-list">
-						{#each extractTopArtists() as artist, i}
-							<div class="artist-item">
-								<span class="rank">#{i + 1}</span>
-								<div class="artist-info">
-									<strong>{artist.name}</strong>
-									<span class="stats">
-										{artist.playCount} plays • {artist.durationMinutes} minutes
+				<h2>Recent Tracks ({extractRecentTracks().length} total)</h2>
+				{#if extractRecentTracks().length > 0}
+					<div class="tracks-list">
+						{#each extractRecentTracks() as track, i}
+							<div class="track-item">
+								<span class="track-number">{i + 1}</span>
+								<div class="track-info">
+									<strong>{track.title}</strong>
+									<span class="track-meta">
+										{track.artist} • {track.album}
 									</span>
 								</div>
 							</div>
 						{/each}
 					</div>
 				{:else}
-					<p>No artist data available</p>
+					<p>No tracks found</p>
 				{/if}
 
 				<details>
-					<summary>Raw Replay Data</summary>
-					<pre>{JSON.stringify(replayData, null, 2)}</pre>
-				</details>
-
-				<details>
-					<summary>Raw Recent Tracks Data</summary>
+					<summary>Raw API Response (for debugging)</summary>
 					<pre>{JSON.stringify(recentTracks, null, 2)}</pre>
 				</details>
 			</div>
@@ -349,38 +347,38 @@
 		margin-top: 2rem;
 	}
 
-	.artists-list {
+	.tracks-list {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 0.5rem;
 		margin: 1rem 0;
 	}
 
-	.artist-item {
+	.track-item {
 		display: flex;
 		align-items: center;
 		gap: 1rem;
-		padding: 1rem;
+		padding: 0.75rem;
 		background: white;
 		border: 1px solid #eee;
 		border-radius: 8px;
 	}
 
-	.rank {
-		font-size: 1.5rem;
+	.track-number {
+		font-size: 1rem;
 		font-weight: bold;
-		color: #fc3c44;
-		min-width: 3rem;
-		text-align: center;
+		color: #999;
+		min-width: 2rem;
+		text-align: right;
 	}
 
-	.artist-info {
+	.track-info {
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
 	}
 
-	.stats {
+	.track-meta {
 		font-size: 0.9rem;
 		color: #666;
 	}

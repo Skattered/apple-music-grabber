@@ -63,15 +63,26 @@
 
 		try {
 			const instance = $musicKitStore.instance;
-			await instance.authorize();
+			const musicUserToken = await instance.authorize();
+
+			if (!musicUserToken) {
+				throw new Error('No music user token received');
+			}
 
 			musicKitStore.update(state => ({
 				...state,
 				isAuthorized: true,
-				musicUserToken: instance.musicUserToken
+				musicUserToken: musicUserToken
 			}));
-		} catch (e) {
-			error = `Authorization failed: ${e}`;
+		} catch (e: any) {
+			console.error('Authorization error:', e);
+			if (e?.errorCode === 'ACCESS_DENIED') {
+				error = 'Authorization was denied or cancelled';
+			} else if (e?.errorCode === 'CONFIGURATION_ERROR') {
+				error = 'Invalid developer token - please check and try again';
+			} else {
+				error = `Authorization failed: ${e?.message || e}`;
+			}
 		} finally {
 			loading = false;
 		}

@@ -26,7 +26,7 @@
 		}
 	});
 
-	function configureMusicKit() {
+	async function configureMusicKit() {
 		if (!devToken.trim()) {
 			error = 'Please enter a developer token';
 			return;
@@ -34,7 +34,7 @@
 
 		try {
 			const musicKit = (window as any).MusicKit;
-			musicKit.configure({
+			await musicKit.configure({
 				developerToken: devToken,
 				app: {
 					name: 'Replay Viewer',
@@ -63,10 +63,19 @@
 
 		try {
 			const instance = $musicKitStore.instance;
+
+			// First authorize to get the user token
 			const musicUserToken = await instance.authorize();
 
 			if (!musicUserToken) {
 				throw new Error('No music user token received');
+			}
+
+			// Set the storefront after authorization
+			try {
+				await instance.api.storefrontId;
+			} catch (storefrontError) {
+				console.warn('Could not fetch storefront, continuing anyway:', storefrontError);
 			}
 
 			musicKitStore.update(state => ({
@@ -80,6 +89,18 @@
 				error = 'Authorization was denied or cancelled';
 			} else if (e?.errorCode === 'CONFIGURATION_ERROR') {
 				error = 'Invalid developer token - please check and try again';
+			} else if (e?.message?.includes('Storefront')) {
+				error = 'Storefront error - continuing anyway (data fetching should still work)';
+				// Mark as authorized anyway since we have the user token
+				const instance = $musicKitStore.instance;
+				if (instance.musicUserToken) {
+					musicKitStore.update(state => ({
+						...state,
+						isAuthorized: true,
+						musicUserToken: instance.musicUserToken
+					}));
+					error = ''; // Clear error since we can continue
+				}
 			} else {
 				error = `Authorization failed: ${e?.message || e}`;
 			}

@@ -61,76 +61,19 @@
 		loading = true;
 		error = '';
 
-		console.log('[AUTH] Starting authorization...');
-
 		try {
 			const instance = $musicKitStore.instance;
-			console.log('[AUTH] MusicKit instance:', instance);
+			const musicUserToken = await instance.authorize();
 
-			// Authorize and immediately check for token, ignoring storefront errors
-			let musicUserToken;
-			try {
-				console.log('[AUTH] Calling instance.authorize()...');
-				musicUserToken = await instance.authorize();
-				console.log('[AUTH] Authorization successful, token:', musicUserToken);
-			} catch (authError: any) {
-				console.log('[AUTH] Authorization threw error:', authError);
-				console.log('[AUTH] Error code:', authError?.errorCode);
-				console.log('[AUTH] Error message:', authError?.message);
-
-				// Wait a bit and check again - token might be set after error
-				await new Promise(resolve => setTimeout(resolve, 500));
-				console.log('[AUTH] Checking instance.musicUserToken after delay...');
-				console.log('[AUTH] Token value:', instance.musicUserToken);
-				console.log('[AUTH] Instance.isAuthorized:', instance.isAuthorized);
-
-				// Check if we actually got a token despite the error
-				if (instance.musicUserToken) {
-					console.warn('[AUTH] Token exists on instance despite error!');
-					console.log('[AUTH] Retrieved token:', instance.musicUserToken);
-					musicUserToken = instance.musicUserToken;
-				} else if (instance.isAuthorized) {
-					console.warn('[AUTH] Instance says authorized but no token visible');
-					// Try to get it through the API
-					try {
-						const userToken = await instance.api.musicUserToken;
-						console.log('[AUTH] Got token from API:', userToken);
-						musicUserToken = userToken;
-					} catch (apiError) {
-						console.error('[AUTH] Could not get token from API:', apiError);
-					}
-				}
-
-				if (!musicUserToken) {
-					console.error('[AUTH] No token on instance, re-throwing error');
-					throw authError;
-				}
-			}
-
-			if (!musicUserToken) {
-				console.error('[AUTH] No music user token received');
-				throw new Error('No music user token received');
-			}
-
-			console.log('[AUTH] Updating store with authorized state');
 			musicKitStore.update(state => ({
 				...state,
 				isAuthorized: true,
 				musicUserToken: musicUserToken
 			}));
-			console.log('[AUTH] Authorization complete!');
 		} catch (e: any) {
-			console.error('[AUTH] Final error handler:', e);
-			if (e?.errorCode === 'ACCESS_DENIED') {
-				error = 'Authorization was denied or cancelled';
-			} else if (e?.errorCode === 'CONFIGURATION_ERROR') {
-				error = 'Invalid developer token - please check and try again';
-			} else {
-				error = `Authorization failed: ${e?.message || e}`;
-			}
+			error = `Authorization failed: ${e?.message || e}`;
 		} finally {
 			loading = false;
-			console.log('[AUTH] Authorization flow ended, loading=false');
 		}
 	}
 

@@ -63,13 +63,33 @@
 
 		try {
 			const instance = $musicKitStore.instance;
-			const musicUserToken = await instance.authorize();
 
-			musicKitStore.update(state => ({
-				...state,
-				isAuthorized: true,
-				musicUserToken: musicUserToken
-			}));
+			// Try to authorize - this will likely fail with storefront error
+			let musicUserToken;
+			try {
+				musicUserToken = await instance.authorize();
+			} catch (authError: any) {
+				console.log('Auth error, checking if token was set anyway:', authError);
+
+				// Check if token exists despite error
+				if (instance.musicUserToken) {
+					musicUserToken = instance.musicUserToken;
+					console.log('Found token on instance despite error!');
+				} else {
+					// If no token, re-throw
+					throw authError;
+				}
+			}
+
+			if (musicUserToken) {
+				musicKitStore.update(state => ({
+					...state,
+					isAuthorized: true,
+					musicUserToken: musicUserToken
+				}));
+			} else {
+				throw new Error('No music user token obtained');
+			}
 		} catch (e: any) {
 			error = `Authorization failed: ${e?.message || e}`;
 		} finally {

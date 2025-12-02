@@ -9,13 +9,21 @@
 	let loading = $state(false);
 
 	onMount(() => {
-		// Wait for MusicKit to load
-		document.addEventListener('musickitloaded', () => {
+		// Check if MusicKit is already loaded
+		if ((window as any).MusicKit) {
 			musicKitStore.update(state => ({
 				...state,
 				isLoaded: true
 			}));
-		});
+		} else {
+			// Wait for MusicKit to load
+			document.addEventListener('musickitloaded', () => {
+				musicKitStore.update(state => ({
+					...state,
+					isLoaded: true
+				}));
+			});
+		}
 	});
 
 	function configureMusicKit() {
